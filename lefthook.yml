@@ -5,6 +5,11 @@ pre-commit:
       run: npx --no -- sort-package-json {staged_files}
       stage_fixed: true
 
+    - name: sort-json
+      glob: "{claude/settings.json}"
+      run: npx --no -- sort-json {staged_files}
+      stage_fixed: true
+
     - name: prettier
       glob: "*.{md,json,yml,yaml,sh}"
       run: npx --no -- prettier --write {staged_files}
