@@ -1,0 +1,8 @@
+# Skills from other repositories. install.sh installs these globally instead of
+# symlinking them, so they are not vendored here.
+#
+#   <owner/repo>[#<ref>]  <skill-name>
+#
+# Pin a ref. The lock file `npx skills` writes records only a folder hash, not
+# the ref it resolved, so an unpinned entry lands on a different commit per machine.
+

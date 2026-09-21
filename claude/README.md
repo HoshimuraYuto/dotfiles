@@ -11,13 +11,13 @@ claude --settings ~/dotfiles/claude/settings.json
 Clone to `~/dotfiles` — `settings.json` points at `~/dotfiles/claude/statusline.sh`.
 
 ```
-npm install          # git hooks
-./claude/install.sh  # symlinks
+npm install          # git hooks, skills CLI
+./claude/install.sh  # symlinks, external skills
 ```
 
 ## install.sh
 
-Symlinks `rules/` to `~/.claude/rules/dotfiles`, and each `skills/*` into `~/.claude/skills/`.
+Symlinks `rules/` to `~/.claude/rules/dotfiles`, and each `skills/*` into `~/.claude/skills/`. Skills listed in `external-skills.txt` are installed into `~/.claude/skills/` instead of being symlinked.
 
 ```
 ./claude/install.sh       # run
@@ -32,3 +32,4 @@ Installed separately, not by `install.sh`.
 | ------------- | ------------------------------------------ |
 | agent-browser | `rules/web-research.md`, `skills/context7` |
 | jq            | `statusline.sh`, `skills/context7`         |
+| Node          | `install.sh`                               |
