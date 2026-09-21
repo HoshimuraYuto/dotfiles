@@ -68,6 +68,9 @@
       "Read(~/.zshrc)"
     ]
   },
+  "skillOverrides": {
+    "security-audit": "user-invocable-only"
+  },
   "statusLine": {
     "command": "bash ~/dotfiles/claude/statusline.sh",
     "type": "command"

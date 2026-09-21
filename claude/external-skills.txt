@@ -6,3 +6,4 @@
 # Pin a ref. The lock file `npx skills` writes records only a folder hash, not
 # the ref it resolved, so an unpinned entry lands on a different commit per machine.
 
+cloudflare/security-audit-skill#c1c8a8c1471069fb0e188eeaff69b8e8db6564a8  security-audit

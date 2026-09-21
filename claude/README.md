@@ -32,4 +32,4 @@ Installed separately, not by `install.sh`.
 | ------------- | ------------------------------------------ |
 | agent-browser | `rules/web-research.md`, `skills/context7` |
 | jq            | `statusline.sh`, `skills/context7`         |
-| Node          | `install.sh`                               |
+| Node          | `install.sh`, `skills/security-audit`      |
