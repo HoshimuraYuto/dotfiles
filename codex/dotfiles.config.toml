@@ -1,0 +1,23 @@
+approval_policy = "on-request"
+approvals_reviewer = "auto_review"
+web_search = "live"
+default_permissions = "dotfiles"
+
+[permissions.dotfiles]
+extends = ":workspace"
+
+[permissions.dotfiles.filesystem]
+"~/.aws" = "deny"
+"~/.ssh" = "deny"
+"~/.bashrc" = "deny"
+"~/.zshrc" = "deny"
+
+[permissions.dotfiles.filesystem.":workspace_roots"]
+"**/.env" = "deny"
+"**/.env.*" = "deny"
+
+[history]
+persistence = "save-all"
+
+[tui]
+status_line = ["model-with-reasoning", "current-dir", "git-branch", "context-used", "five-hour-limit", "weekly-limit"]

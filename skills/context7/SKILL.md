@@ -1,4 +1,5 @@
 ---
+name: context7
 description: Fetch current library and framework documentation from Context7. Use when checking API usage or version differences while implementing, or when told "use context7".
 ---
 

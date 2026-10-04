@@ -2,14 +2,17 @@
 
 ## Adding something new
 
-Anything new under `claude/` that depends on a tool `install.sh` does not
-install → add it to the Requirements table in `claude/README.md`.
+Anything new that depends on a tool the installers do not install → add it to
+the Requirements table in the affected agent's README.
 
-`install.sh` symlinks `claude/rules/` as a directory and each `claude/skills/*`
-individually. A new rule file is picked up with no further step; a new skill
-directory needs `install.sh` re-run.
+Shared skills belong in `skills/`; agent-specific `skills/` entries link to them.
+Shared prose rules belong in `rules/`; Claude links to each rule and Codex
+concatenates them with `codex/instructions.md` into its global `AGENTS.md`.
+Re-run the Codex installer after editing shared rules, and the relevant
+installer after adding a skill. Keep tool-specific instructions separate.
 
 A skill from another repository is not vendored here. List it in
-`claude/external-skills.txt` with a pinned ref and `install.sh` installs it
-globally. Whether it stays model-invocable is a separate decision, made with
-`skillOverrides` in `claude/settings.json`.
+`external-skills.txt` with a pinned ref and the installers install it globally.
+Whether it stays model-invocable is a separate decision: `skillOverrides` in
+`claude/settings.json`, or `agents/openai.yaml` under `codex/skill-overrides/`.
+Only overrides are tracked for external skills, never their fetched contents.

@@ -17,7 +17,16 @@ npm install          # git hooks, skills CLI
 
 ## install.sh
 
-Symlinks `rules/` to `~/.claude/rules/dotfiles`, and each `skills/*` into `~/.claude/skills/`. Skills listed in `external-skills.txt` are installed into `~/.claude/skills/` instead of being symlinked.
+Symlinks `rules/` to `~/.claude/rules/dotfiles`, and each `skills/*` into
+`~/.claude/skills/`. These skill entries and the common rule files link to the
+root [`skills/`](../skills) and [`rules/`](../rules) sources. Existing links still
+work through the additional symlink.
+
+Skills listed in [`external-skills.txt`](../external-skills.txt) are installed
+globally by the skills CLI, not vendored. An existing installation is retained;
+after changing a pinned ref, reinstall that external skill at the new ref.
+`CLAUDE_CONFIG_DIR` changes the link destination; external downloads still use
+the CLI's global location and are linked into a custom destination if needed.
 
 ```
 ./claude/install.sh       # run
@@ -28,8 +37,8 @@ Symlinks `rules/` to `~/.claude/rules/dotfiles`, and each `skills/*` into `~/.cl
 
 Installed separately, not by `install.sh`.
 
-|               | Used by                                    |
-| ------------- | ------------------------------------------ |
-| agent-browser | `rules/web-research.md`, `skills/context7` |
-| jq            | `statusline.sh`, `skills/context7`         |
-| Node          | `install.sh`, `skills/security-audit`      |
+|               | Used by                                           |
+| ------------- | ------------------------------------------------- |
+| agent-browser | `rules/web-research.md`, shared `skills/context7` |
+| jq            | `statusline.sh`, shared `skills/context7`         |
+| Node          | `install.sh`, external `security-audit`           |
