@@ -65,7 +65,8 @@
       "Read(~/.aws/**)",
       "Read(~/.ssh/**)",
       "Read(~/.bashrc)",
-      "Read(~/.zshrc)"
+      "Read(~/.zshrc)",
+      "Read(~/.zshrc.local)"
     ]
   },
   "skillOverrides": {
