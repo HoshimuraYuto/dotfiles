@@ -1,0 +1,14 @@
+brew "gh"
+brew "mise"
+
+brew "powerlevel10k"
+brew "zsh-autosuggestions"
+brew "zsh-completions"
+brew "zsh-syntax-highlighting"
+
+brew "xcbeautify"
+brew "xcode-build-server"
+brew "xcodegen"
+
+cask "1password-cli"
+cask "tailscale-app"
