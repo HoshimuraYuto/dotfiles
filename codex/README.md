@@ -1,6 +1,6 @@
 # Codex
 
-Local Codex configuration, tested with CLI 0.160.0. Uses the current
+Local Codex configuration, tested with CLI 0.162.1. Uses the current
 [file-based profiles](https://learn.chatgpt.com/docs/config-file/config-advanced)
 and [permission profiles](https://learn.chatgpt.com/docs/permissions).
 
