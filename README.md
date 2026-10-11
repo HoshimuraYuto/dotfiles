@@ -1,14 +1,21 @@
 # Dotfiles
 
-Personal [Claude](claude/README.md) and [Codex](codex/README.md) configuration.
+Personal macOS setup: [Homebrew packages](macos/README.md), [zsh](zsh/README.md),
+[git](git/README.md), [mise tools](mise/README.md), and [Claude](claude/README.md)
+and [Codex](codex/README.md) configuration.
+
+Install [Homebrew](https://brew.sh) first, then:
 
 ```sh
-npm install
+./macos/install.sh
+./zsh/install.sh
+./git/install.sh
+./mise/install.sh
 ./claude/install.sh
 ./codex/install.sh
 ```
 
-Use `-n` with either installer to preview changes. Existing files and unrelated
+Use `-n` with any installer to preview changes. Existing files and unrelated
 settings are preserved; conflicting entries are reported instead of replaced.
 
 Shared skills live in `skills/`; each agent's `skills/` links to those sources.

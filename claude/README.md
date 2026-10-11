@@ -11,7 +11,7 @@ claude --settings ~/dotfiles/claude/settings.json
 Clone to `~/dotfiles` — `settings.json` points at `~/dotfiles/claude/statusline.sh`.
 
 ```
-npm install          # git hooks, skills CLI
+./mise/install.sh    # Node, git hooks, skills CLI
 ./claude/install.sh  # symlinks, external skills
 ```
 

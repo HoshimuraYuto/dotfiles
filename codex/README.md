@@ -7,7 +7,7 @@ and [permission profiles](https://learn.chatgpt.com/docs/permissions).
 ## Setup
 
 ```sh
-npm install
+./mise/install.sh
 ./codex/install.sh -n # preview
 ./codex/install.sh
 codex --profile dotfiles
