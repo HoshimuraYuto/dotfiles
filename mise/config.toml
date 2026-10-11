@@ -1,0 +1,6 @@
+[tools]
+node = "lts"
+agent-browser = "latest"
+codex = "latest"
+gemini-cli = "latest"
+pnpm = "latest"

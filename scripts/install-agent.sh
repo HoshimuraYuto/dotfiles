@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Sourced by each agent's installer; callers set repo, dest, skills_dest and dry.
+# Sourced by each installer; callers set dry, plus repo and skills_dest for install_skills.
 
 failed=0
 
@@ -60,6 +60,10 @@ install_skills() {
       continue
     fi
     if [[ ! -e $global_dir/$name/SKILL.md ]]; then
+      # A shell opened before mise/install.sh has no Node on PATH yet
+      if ! command -v npx > /dev/null && command -v mise > /dev/null; then
+        eval "$(mise env -s bash)"
+      fi
       if ! (cd "$repo" && npx --no -- skills add "$spec" --skill "$name" --agent "$agent" --global --yes); then
         echo "FAILED     $name <- $spec"
         failed=1
