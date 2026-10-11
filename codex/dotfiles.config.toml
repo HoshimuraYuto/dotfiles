@@ -11,6 +11,7 @@ extends = ":workspace"
 "~/.ssh" = "deny"
 "~/.bashrc" = "deny"
 "~/.zshrc" = "deny"
+"~/.zshrc.local" = "deny"
 
 [permissions.dotfiles.filesystem.":workspace_roots"]
 "**/.env" = "deny"
