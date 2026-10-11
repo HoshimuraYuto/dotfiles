@@ -1,5 +1,9 @@
 pre-commit:
   jobs:
+    # The repository is public; block staged secrets before they are committed
+    - name: gitleaks
+      run: mise exec -- gitleaks git --pre-commit --staged --redact --no-banner
+
     - name: sort-package-json
       glob: "package.json"
       run: npx --no -- sort-package-json {staged_files}
