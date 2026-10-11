@@ -13,5 +13,8 @@
     "skills": "^1.7.0",
     "sort-json": "^2.0.1",
     "sort-package-json": "^4.0.0"
+  },
+  "allowScripts": {
+    "lefthook": false
   }
 }
