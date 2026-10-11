@@ -1,0 +1,13 @@
+[color]
+	ui = auto
+[fetch]
+	prune = true
+[commit]
+	gpgsign = true
+[gpg]
+	program = gpg2
+	format = ssh
+[init]
+	defaultBranch = main
+[gpg "ssh"]
+	program = /Applications/1Password.app/Contents/MacOS/op-ssh-sign
