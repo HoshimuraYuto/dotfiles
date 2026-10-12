@@ -148,13 +148,27 @@ check_local() {
   done < <(h skills list-modified 2> /dev/null | sed -n 's/^ *~ //p')
 }
 
+# Plugins for every profile come from the shared plugins.txt, then the profile's own.
+# Bundled plugins ship with Hermes and only need enabling; others come from the catalog.
 install_plugins() {
-  local plugin extra
-  [[ -f $dir/plugins.txt ]] || return 0
-  while read -r plugin extra; do
-    [[ -z $plugin || $plugin == \#* ]] && continue
+  local plugin info
+  while read -r plugin; do
     if grep -qsF "\"catalog_name\": \"$plugin\"" "$home"/plugins/*/.hermes-catalog.json; then
       echo "ok         $profile: plugin $plugin"
+      continue
+    fi
+    info=$(h plugins info "$plugin" 2> /dev/null || true)
+    if grep -qx 'Source: bundled' <<< "$info"; then
+      if grep -qx 'Status: enabled' <<< "$info"; then
+        echo "ok         $profile: plugin $plugin"
+      elif $dry; then
+        echo "would enable $profile: plugin $plugin"
+      elif h plugins enable "$plugin" --no-allow-tool-override > /dev/null; then
+        echo "enabled    $profile: plugin $plugin"
+      else
+        echo "FAILED     $profile: plugin $plugin"
+        failed=1
+      fi
     elif $dry; then
       echo "would add  $profile: plugin $plugin"
     elif h plugins install "$plugin" --enable --yes-deps > /dev/null; then
@@ -163,7 +177,69 @@ install_plugins() {
       echo "FAILED     $profile: plugin $plugin"
       failed=1
     fi
-  done < "$dir/plugins.txt"
+  done < <(plugin_list)
+}
+
+# Machine -> repo: an enabled plugin neither list names was added by hand (for
+# example `hermes plugins install`) and holds in this profile only. A catalog
+# plugin is enabled under its directory name; the lists use the catalog name.
+check_plugins() {
+  local name listed
+  listed=$(plugin_list)
+  while read -r name; do
+    [[ -n $name ]] || continue
+    if [[ -f $home/plugins/$name/.hermes-catalog.json ]]; then
+      name=$(jq -r '.catalog_name // empty' "$home/plugins/$name/.hermes-catalog.json" 2> /dev/null || echo "$name")
+    fi
+    grep -qxF "$name" <<< "$listed" && continue
+    echo "UNMANAGED  $profile: plugin $name (add it to a plugins.txt)"
+    failed=1
+  done < <(h config get --json plugins.enabled 2> /dev/null | jq -r '.[]?' 2> /dev/null || true)
+}
+
+# Names from both lists in order, without comments, blank lines or repeats
+plugin_list() {
+  local files=() f
+  for f in "$private/hermes/plugins.txt" "$dir/plugins.txt"; do
+    [[ -f $f ]] && files+=("$f")
+  done
+  ((${#files[@]})) || return 0
+  awk '$1 != "" && $1 !~ /^#/ && !seen[$1]++ { print $1 }' "${files[@]}"
+}
+
+# External skills for one profile: profiles/<name>/external-skills.txt, in the format of
+# the repo's external-skills.txt (which covers every profile through ~/.agents/skills).
+# `skills add` without --global installs into .agents/skills under its working
+# directory, here one per profile outside both repositories; the shared config.txt
+# lists that directory in skills.external_dirs.
+install_external_skills() {
+  local list=$dir/external-skills.txt spec name extra
+  local to=$HOME/.local/share/dotfiles/hermes/profiles/$profile
+  [[ -f $list ]] || return 0
+  while read -r spec name extra; do
+    [[ -z $spec || $spec == \#* ]] && continue
+    if [[ -z $name || -n $extra || $spec != *#?* || ! $name =~ ^[a-z0-9][a-z0-9-]*$ ]]; then
+      echo "INVALID    $profile: external skill $spec $name"
+      failed=1
+    elif [[ -f $to/.agents/skills/$name/SKILL.md ]]; then
+      echo "ok         $profile: skill $name"
+    elif $dry; then
+      echo "would add  $profile: skill $name <- $spec"
+    else
+      # A shell opened before mise/install.sh has no Node on PATH yet
+      if ! command -v npx > /dev/null && command -v mise > /dev/null; then
+        eval "$(mise env -s bash)"
+      fi
+      mkdir -p "$to"
+      if (cd "$to" && npx --prefix "$repo" --no -- skills add "$spec" --skill "$name" --agent codex --yes < /dev/null > /dev/null) \
+        && [[ -f $to/.agents/skills/$name/SKILL.md ]]; then
+        echo "added      $profile: skill $name"
+      else
+        echo "FAILED     $profile: skill $name <- $spec"
+        failed=1
+      fi
+    fi
+  done < "$list"
 }
 
 # Settings for every profile come from the shared config.txt; the profile's own
@@ -248,7 +324,7 @@ hermes_root() {
 }
 
 # Profiles in the repository, then any other Hermes profile on this machine (one
-# created from the Bots tab, say), which gets the shared settings only.
+# created from the Bots tab, say), which gets the shared settings and plugins only.
 # Profiles named in the private repository's hermes/skip-profiles.txt are left alone.
 profile_names() {
   local root skip=$private/hermes/skip-profiles.txt
@@ -348,6 +424,8 @@ while read -r profile; do
   fi
   # Plugins first: a plugin can provide the model.provider that config.txt selects
   install_plugins
+  $auto || check_plugins
+  install_external_skills
   apply_config
   verify_auto_load
 done < <(profile_names)

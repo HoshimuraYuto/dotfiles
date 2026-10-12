@@ -22,7 +22,7 @@ section "Links not in place" "$links"
 
 if command -v hermes > /dev/null; then
   section "Hermes settings not applied" \
-    "$("$repo/hermes/install.sh" -n 2>&1 | grep -E '^(CONFLICT|UNMANAGED|MISSING|NOT LOADED|would (set|add|write|load)|INVALID)')"
+    "$("$repo/hermes/install.sh" -n 2>&1 | grep -E '^(CONFLICT|UNMANAGED|MISSING|NOT LOADED|would (set|add|enable|write|load)|INVALID)')"
   # The private repository's hooks must be installed, or its commits skip the secret scan
   [[ -f $private/package.json ]] \
     && section "Git hooks missing in the private repo" \

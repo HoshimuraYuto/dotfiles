@@ -31,6 +31,12 @@ case "$1 $2" in
   "config set") v=$4; jq -e . <<< "$v" > /dev/null 2>&1 || v=$(jq -n --arg v "$4" '$v'); echo "$v" > "$home/cfg/$3" ;;
   "skills list-modified") cat "$home/modified" 2> /dev/null || true ;;
   "plugins install") mkdir -p "$home/plugins/$3"; printf '{\\n  "catalog_name": "%s"\\n}\\n' "$3" > "$home/plugins/$3/.hermes-catalog.json" ;;
+  # Plugins named bundled-* ship with the fake Hermes and only need enabling
+  "plugins info")
+    [[ $3 == bundled-* ]] || { echo "$3 [community]"; exit 0; }
+    [[ -f $home/enabled/$3 ]] && s=enabled || s="not enabled"
+    printf '%s v1\\nStatus: %s\\nSource: bundled\\n' "$3" "$s" ;;
+  "plugins enable") [[ $3 == bundled-* ]] || exit 1; mkdir -p "$home/enabled"; touch "$home/enabled/$3" ;;
   *) echo "unexpected: $*" >&2; exit 9 ;;
 esac
 `;
@@ -406,6 +412,138 @@ test("profiles, plugins and settings are applied once", (t) => {
   const rerun = f.run();
   succeeded(rerun);
   assert.doesNotMatch(rerun.stdout, /^(?!ok ).+/m);
+});
+
+test("shared plugins reach every profile, bundled ones are enabled", (t) => {
+  const f = fixture(t);
+  writeFileSync(
+    join(f.private_, "hermes", "plugins.txt"),
+    "# every profile\nbundled-guard\nshared-plugin\n\nsome-plugin\n",
+  );
+  const dry = f.run("-n");
+  succeeded(dry);
+  assert.match(dry.stdout, /would enable default: plugin bundled-guard/);
+  assert.doesNotMatch(f.log(), / plugins (enable|install)/);
+
+  succeeded(f.run());
+  for (const home of [f.hermes, join(f.hermes, "profiles/dotfiles")]) {
+    assert.ok(existsSync(join(home, "enabled/bundled-guard")));
+    assert.ok(existsSync(join(home, "plugins/shared-plugin")));
+    assert.ok(!existsSync(join(home, "plugins/bundled-guard")));
+  }
+  // A plugin in both lists is installed once per profile
+  assert.equal(
+    f.log().match(/^dotfiles plugins install some-plugin/gm).length,
+    1,
+  );
+  // Shared plugins come first, still before the settings
+  const log = f.log();
+  assert.ok(
+    log.indexOf("dotfiles plugins enable bundled-guard") <
+      log.indexOf("dotfiles plugins install some-plugin"),
+  );
+  assert.ok(
+    log.indexOf("dotfiles plugins install some-plugin") <
+      log.indexOf("dotfiles config set model.provider"),
+  );
+
+  const rerun = f.run();
+  succeeded(rerun);
+  assert.doesNotMatch(rerun.stdout, /^(?!ok ).+/m);
+});
+
+test("a new bot gets the shared plugins from the automatic run", (t) => {
+  const f = fixture(t);
+  writeFileSync(
+    join(f.private_, "hermes", "plugins.txt"),
+    "bundled-guard\nshared-plugin\n",
+  );
+  succeeded(f.run());
+  // A bot made in the desktop app, with no directory in the private repo
+  const bot = join(f.hermes, "profiles", "bot");
+  mkdirSync(join(bot, "cfg"), { recursive: true });
+  const auto = f.run("--auto", "bot");
+  succeeded(auto);
+  assert.match(auto.stdout, /enabled {4}bot: plugin bundled-guard/);
+  assert.ok(existsSync(join(bot, "enabled/bundled-guard")));
+  assert.ok(existsSync(join(bot, "plugins/shared-plugin")));
+  // Only the shared list: the repo profiles' own plugins stay theirs
+  assert.ok(!existsSync(join(bot, "plugins/some-plugin")));
+});
+
+test("a profile's own external skills are installed for that profile only", (t) => {
+  const f = fixture(t);
+  const bin = join(f.env.HOME, "..", "bin");
+  // A fake skills CLI: records the call and installs into ./.agents/skills
+  writeFileSync(
+    join(bin, "npx"),
+    `#!/usr/bin/env bash
+echo "npx $* in $PWD" >> "${bin}/../npx.log"
+while [[ $# -gt 0 ]]; do [[ $1 == --skill ]] && name=$2; shift; done
+mkdir -p ".agents/skills/$name" && echo x > ".agents/skills/$name/SKILL.md"
+`,
+    { mode: 0o755 },
+  );
+  const list = join(f.private_, "hermes/profiles/default/external-skills.txt");
+  writeFileSync(
+    list,
+    "# comment\nowner/repo#abc123  one-skill\nowner/repo  unpinned\n",
+  );
+  const skills = (p) =>
+    join(
+      f.env.HOME,
+      ".local/share/dotfiles/hermes/profiles",
+      p,
+      ".agents/skills",
+    );
+
+  const dry = f.run("-n");
+  assert.equal(dry.status, 1);
+  assert.match(
+    dry.stdout,
+    /would add {2}default: skill one-skill <- owner\/repo#abc123/,
+  );
+  // An entry without a pinned ref is refused
+  assert.match(
+    dry.stdout,
+    /INVALID {4}default: external skill owner\/repo unpinned/,
+  );
+  assert.ok(!existsSync(join(bin, "..", "npx.log")));
+
+  writeFileSync(list, "owner/repo#abc123  one-skill\n");
+  succeeded(f.run());
+  assert.ok(existsSync(join(skills("default"), "one-skill/SKILL.md")));
+  assert.ok(!existsSync(skills("dotfiles")));
+  const npx = readFileSync(join(bin, "..", "npx.log"), "utf8");
+  assert.match(npx, /skills add owner\/repo#abc123 --skill one-skill .*--yes/);
+  assert.doesNotMatch(npx, / --global/);
+
+  const rerun = f.run();
+  succeeded(rerun);
+  assert.match(rerun.stdout, /ok {9}default: skill one-skill/);
+  assert.equal(readFileSync(join(bin, "..", "npx.log"), "utf8"), npx);
+});
+
+test("a plugin enabled outside the lists is reported", (t) => {
+  const f = fixture(t);
+  succeeded(f.run());
+  // some-plugin is listed under its catalog name, enabled under its directory name
+  const dir = join(f.hermes, "plugins", "some-plugin-dir");
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(
+    join(dir, ".hermes-catalog.json"),
+    '{ "catalog_name": "some-plugin" }\n',
+  );
+  writeFileSync(
+    join(f.hermes, "cfg", "plugins.enabled"),
+    '["some-plugin-dir", "hand-made"]\n',
+  );
+  const result = f.run("-n");
+  assert.equal(result.status, 1);
+  assert.match(result.stdout, /UNMANAGED {2}default: plugin hand-made/);
+  assert.doesNotMatch(result.stdout, /plugin some-plugin(-dir)? \(/);
+  // The automatic run has no one to report to
+  assert.doesNotMatch(f.run("--auto").stdout, /UNMANAGED/);
 });
 
 test("skills outside the repo are reported unless Hermes owns them", (t) => {
