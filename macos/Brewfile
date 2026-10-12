@@ -1,3 +1,4 @@
+brew "fswatch"
 brew "gh"
 brew "mise"
 

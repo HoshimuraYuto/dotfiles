@@ -11,6 +11,8 @@ private repository cloned to `~/dotfiles-private` (override with
   config.txt    settings that differ from the Hermes defaults
   plugins.txt   catalog plugins
   skills/       the profile's own and edited bundled skills
+~/dotfiles-private/hermes/config.txt
+  settings for every profile ({profile} = the profile's name)
 ~/dotfiles-private/hermes/skills/
   skills shared by every profile (second skills.external_dirs entry)
 ```
@@ -20,6 +22,24 @@ its own git hooks (gitleaks, prettier, commitlint). It then creates missing
 profiles and applies, per profile, `plugins.txt`
 with `hermes plugins install`, then `config.txt` with `hermes config set`.
 `config.yaml` is not linked because Hermes rewrites it.
+
+Shared settings come before the profile's own `config.txt`, which overrides a
+key it repeats. Hermes profiles without a directory in the private repository,
+such as a bot made in the desktop app, get the shared settings too.
+Hermes has no hook for a new profile, so `install.sh` also loads a launch agent,
+`dotfiles.hermes-sync`, that keeps [`watch.sh`](watch.sh) running: it watches
+the profiles directory with `fswatch` and configures each new profile within a
+few seconds. Every run checks that each skill in `skills.auto_load` is set and
+present, and reports `NOT LOADED` (a notification for the agent's runs) until it
+is; list a profile in the private repository's `hermes/skip-profiles.txt` to
+leave it alone.
+
+Hermes has no global instructions file (`SOUL.md` is the persona), so
+`install.sh` generates the shared [`rules/`](../rules) plus the private
+repository's optional `hermes/instructions.md` into a `dotfiles-rules` skill
+under `~/.local/share/dotfiles/hermes/skills/`. The shared `config.txt` adds
+that directory to `skills.external_dirs` and the skill to `skills.auto_load`.
+Re-run after editing those sources.
 
 ```sh
 ./hermes/install.sh -n # preview
@@ -53,6 +73,7 @@ Installed separately, not by `install.sh`.
 | -------------------------------- | ------------------ |
 | Hermes                           | `install.sh`       |
 | jq                               | `install.sh`       |
+| fswatch (`macos/Brewfile`)       | `watch.sh`         |
 | `~/dotfiles-private` (git clone) | `install.sh`       |
 | Node                             | `install.test.mjs` |
 
