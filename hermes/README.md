@@ -14,6 +14,8 @@ private repository cloned to `~/dotfiles-private` (override with
   external-skills.txt  skills from other repositories for this profile only
 ~/dotfiles-private/hermes/plugins.txt
   plugins for every profile
+~/dotfiles-private/hermes/external-skills.txt
+  skills from other repositories for every profile (Hermes only)
 ~/dotfiles-private/hermes/config.txt
   settings for every profile ({profile} = the profile's name)
 ~/dotfiles-private/hermes/skills/
@@ -38,12 +40,15 @@ installs into one profile only, and `install.sh -n` reports a plugin enabled
 outside both plugin lists as `UNMANAGED`. To load a skill in full in every session, also
 add it to `skills.auto_load` in the shared `config.txt`.
 
-For one profile only, put the skill in the profile's `skills/` or, for a skill
-from another repository, list it in the profile's `external-skills.txt` (same
-format, ref pinned). `install.sh` installs those with the same `skills` CLI into
-`~/.local/share/dotfiles/hermes/profiles/<name>/.agents/skills`, a directory
+Skills from other repositories for Hermes only go in the private repository's
+`hermes/external-skills.txt` (every profile) or a profile's
+`external-skills.txt` (that profile), in the same format with the ref pinned.
+`install.sh` installs them with the same `skills` CLI into
+`~/.local/share/dotfiles/hermes/shared/.agents/skills` or
+`~/.local/share/dotfiles/hermes/profiles/<name>/.agents/skills`, directories
 outside both repositories that the shared `config.txt` adds to
-`skills.external_dirs` as `{profile}`'s own.
+`skills.external_dirs`. For an own skill in one profile only, use the profile's
+`skills/`.
 
 Shared settings come before the profile's own `config.txt`, which overrides a
 key it repeats. Hermes profiles without a directory in the private repository,

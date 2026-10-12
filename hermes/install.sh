@@ -207,24 +207,25 @@ plugin_list() {
   awk '$1 != "" && $1 !~ /^#/ && !seen[$1]++ { print $1 }' "${files[@]}"
 }
 
-# External skills for one profile: profiles/<name>/external-skills.txt, in the format of
-# the repo's external-skills.txt (which covers every profile through ~/.agents/skills).
-# `skills add` without --global installs into .agents/skills under its working
-# directory, here one per profile outside both repositories; the shared config.txt
-# lists that directory in skills.external_dirs.
+# External skills for Hermes only, from a list in the format of the repo's
+# external-skills.txt (which also covers Claude and Codex through ~/.agents/skills):
+# the shared hermes/external-skills.txt for every profile, and
+# profiles/<name>/external-skills.txt for one. `skills add` without --global installs
+# into .agents/skills under its working directory, here a directory outside both
+# repositories that the shared config.txt lists in skills.external_dirs.
+# Usage: install_external_skills <list> <directory> <label>
 install_external_skills() {
-  local list=$dir/external-skills.txt spec name extra
-  local to=$HOME/.local/share/dotfiles/hermes/profiles/$profile
+  local list=$1 to=$2 label=$3 spec name extra
   [[ -f $list ]] || return 0
   while read -r spec name extra; do
     [[ -z $spec || $spec == \#* ]] && continue
     if [[ -z $name || -n $extra || $spec != *#?* || ! $name =~ ^[a-z0-9][a-z0-9-]*$ ]]; then
-      echo "INVALID    $profile: external skill $spec $name"
+      echo "INVALID    $label: external skill $spec $name"
       failed=1
     elif [[ -f $to/.agents/skills/$name/SKILL.md ]]; then
-      echo "ok         $profile: skill $name"
+      echo "ok         $label: skill $name"
     elif $dry; then
-      echo "would add  $profile: skill $name <- $spec"
+      echo "would add  $label: skill $name <- $spec"
     else
       # A shell opened before mise/install.sh has no Node on PATH yet
       if ! command -v npx > /dev/null && command -v mise > /dev/null; then
@@ -233,9 +234,9 @@ install_external_skills() {
       mkdir -p "$to"
       if (cd "$to" && npx --prefix "$repo" --no -- skills add "$spec" --skill "$name" --agent codex --yes < /dev/null > /dev/null) \
         && [[ -f $to/.agents/skills/$name/SKILL.md ]]; then
-        echo "added      $profile: skill $name"
+        echo "added      $label: skill $name"
       else
-        echo "FAILED     $profile: skill $name <- $spec"
+        echo "FAILED     $label: skill $name <- $spec"
         failed=1
       fi
     fi
@@ -401,6 +402,10 @@ install_agent() {
   echo "generated  $to"
 }
 
+# Once for every profile, before the profiles that list the directory
+install_external_skills "$private/hermes/external-skills.txt" \
+  "$HOME/.local/share/dotfiles/hermes/shared" "every profile"
+
 while read -r profile; do
   dir=$profiles/$profile
   if ! h config path > /dev/null 2>&1; then
@@ -425,7 +430,8 @@ while read -r profile; do
   # Plugins first: a plugin can provide the model.provider that config.txt selects
   install_plugins
   $auto || check_plugins
-  install_external_skills
+  install_external_skills "$dir/external-skills.txt" \
+    "$HOME/.local/share/dotfiles/hermes/profiles/$profile" "$profile"
   apply_config
   verify_auto_load
 done < <(profile_names)

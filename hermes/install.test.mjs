@@ -524,6 +524,47 @@ mkdir -p ".agents/skills/$name" && echo x > ".agents/skills/$name/SKILL.md"
   assert.equal(readFileSync(join(bin, "..", "npx.log"), "utf8"), npx);
 });
 
+test("shared external skills are installed once for every profile", (t) => {
+  const f = fixture(t);
+  const bin = join(f.env.HOME, "..", "bin");
+  const log = join(bin, "..", "npx.log");
+  writeFileSync(
+    join(bin, "npx"),
+    `#!/usr/bin/env bash
+echo "npx $* in $PWD" >> "${log}"
+while [[ $# -gt 0 ]]; do [[ $1 == --skill ]] && name=$2; shift; done
+mkdir -p ".agents/skills/$name" && echo x > ".agents/skills/$name/SKILL.md"
+`,
+    { mode: 0o755 },
+  );
+  writeFileSync(
+    join(f.private_, "hermes", "external-skills.txt"),
+    "# every profile\nowner/repo#abc123  shared-skill\n",
+  );
+  const shared = join(f.env.HOME, ".local/share/dotfiles/hermes/shared");
+
+  const dry = f.run("-n");
+  succeeded(dry);
+  assert.match(
+    dry.stdout,
+    /would add {2}every profile: skill shared-skill <- owner\/repo#abc123/,
+  );
+  assert.ok(!existsSync(log));
+
+  succeeded(f.run());
+  assert.ok(existsSync(join(shared, ".agents/skills/shared-skill/SKILL.md")));
+  // One install for all profiles, not one per profile
+  assert.equal(readFileSync(log, "utf8").split("\n").filter(Boolean).length, 1);
+  assert.match(readFileSync(log, "utf8"), new RegExp(` in ${shared}$`, "m"));
+
+  const rerun = f.run();
+  succeeded(rerun);
+  assert.match(rerun.stdout, /ok {9}every profile: skill shared-skill/);
+  // The automatic run for a new bot does not reinstall it
+  succeeded(f.run("--auto"));
+  assert.equal(readFileSync(log, "utf8").split("\n").filter(Boolean).length, 1);
+});
+
 test("a plugin enabled outside the lists is reported", (t) => {
   const f = fixture(t);
   succeeded(f.run());
