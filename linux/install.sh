@@ -208,24 +208,31 @@ fi
 
 # --- Summary
 
+host=$(hostname)
 cat << EOF
 
 SSH port $ssh_port, VNC port $vnc_port (localhost only)
 Add to ~/.ssh/config on the Mac:
 
-  Host $(hostname)
+  Host $host
     HostName $(hostname -I 2> /dev/null | awk '{print $1}')
     Port $ssh_port
     User $user
+    IdentityFile ~/.ssh/id_ed25519_$host
+    IdentitiesOnly yes
     LocalForward 5901 localhost:$vnc_port
 
-Then: ssh $(hostname), and open vnc://localhost:5901 while it is connected.
+IdentitiesOnly stops ssh offering every agent key first; sshd disconnects
+after six with "Too many authentication failures".
+Then: ssh $host, and open vnc://localhost:5901 while it is connected.
 EOF
 if [[ $password_auth == yes ]]; then
   cat << EOF
 
 Password login is still on: no key in ~/.ssh/authorized_keys.
-From the Mac, run: ssh-copy-id -p $ssh_port $user@<address>
+From the Mac, after adding the entry above:
+  ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519_$host
+  ssh-copy-id -i ~/.ssh/id_ed25519_$host.pub $host
 Then run this installer again to allow keys only.
 EOF
 fi

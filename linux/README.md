@@ -28,10 +28,14 @@ printing the `~/.ssh/config` entry for the Mac. Port 22 stops listening once
 the new port is active; keep the current session open until a login on the new
 port works.
 
-Then, from the Mac:
+Then, on the Mac, add that entry to `~/.ssh/config` before connecting. It
+names one key with `IdentitiesOnly yes`: without it, ssh first offers every
+key in the agent (1Password, for example), and sshd disconnects after six with
+"Too many authentication failures". Create the key and copy it over:
 
 ```sh
-ssh-copy-id -p <ssh port> <user>@<address>
+ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519_<host>
+ssh-copy-id -i ~/.ssh/id_ed25519_<host>.pub <host>
 ```
 
 and run `install.sh` again to turn off password login.
