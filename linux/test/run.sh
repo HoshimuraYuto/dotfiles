@@ -44,7 +44,9 @@ check() {
 echo "## preview on a fresh machine"
 check "preview lists missing packages" "on '/dotfiles/linux/install.sh -n' | grep -q '^would install'"
 
-echo "## first run"
+echo "## first run, with a desktop login holding displays :0 and :1"
+# GNOME's Xwayland takes :0 and :1 on a real desktop; a lock file is what tigervncserver checks
+as_root 'mkdir -p /tmp/.X11-unix && for n in 0 1; do touch /tmp/.X$n-lock /tmp/.X11-unix/X$n; done'
 as_root 'echo tester:test-password | chpasswd'
 on '/dotfiles/linux/install.sh' > /dev/null 2>&1 || true
 # tigervnc-tools is installed by the run above, so the password can be written only now
@@ -81,15 +83,17 @@ check "key login on the new port" "from_client 'ssh $ssh_opts -o BatchMode=yes t
 check "VNC answers through an SSH tunnel" \
   "from_client 'ssh $ssh_opts -f -o ExitOnForwardFailure=yes -L 5901:localhost:$vnc_port tester@$host sleep 5 && head -c 12 < /dev/tcp/127.0.0.1/5901' | grep -q '^RFB 003'"
 
+check "VNC avoids the displays the desktop holds" "as_root 'systemctl is-active tigervncserver@:10.service'"
+
 echo "## status report"
 status=$(on '/dotfiles/linux/status.sh')
 check "status reports no problem" "! grep -q '^NG' <<< \"\$status\""
 check "status hides ports, address, host and user" \
   "! grep -qE '\\b($ssh_port|$vnc_port)\\b|$host|tester|172\\.' <<< \"\$status\""
-as_root 'systemctl stop tigervncserver@:1.service'
+as_root 'systemctl stop tigervncserver@:10.service'
 check "status reports a stopped VNC server" \
   "on '/dotfiles/linux/status.sh' | grep -q '^NG *VNC: nothing listens on 127.0.0.1:<VNC_PORT>'"
-as_root 'systemctl start tigervncserver@:1.service'
+as_root 'systemctl start tigervncserver@:10.service'
 
 echo "## second run, after a key was added"
 out2=$(on '/dotfiles/linux/install.sh' 2>&1)
@@ -98,7 +102,19 @@ check "password login is off" "as_root 'sshd -T' | grep -qx 'passwordauthenticat
 check "password login is refused" \
   "! from_client 'ssh $ssh_opts -o BatchMode=yes -o PreferredAuthentications=password tester@$host true'"
 check "key login still works" "from_client 'ssh $ssh_opts -o BatchMode=yes tester@$host true'"
-check "third run changes nothing" "! on '/dotfiles/linux/install.sh' | grep -qE '^(wrote|added|would)'"
+check "third run changes nothing" "! on '/dotfiles/linux/install.sh' | grep -qE '^(wrote|added|mapped|would|TAKEN)'"
+
+echo "## a machine set up by the earlier version, with VNC on the taken :1"
+as_root 'systemctl disable --now tigervncserver@:10.service \
+  && sed -i "/=tester/d" /etc/tigervnc/vncserver.users \
+  && echo ":1=tester" >> /etc/tigervnc/vncserver.users \
+  && systemctl enable --now tigervncserver@:1.service'
+sleep 2
+check "earlier state: VNC not listening" "! as_root 'ss -ltnH' | grep -q '127.0.0.1:$vnc_port '"
+fix=$(on '/dotfiles/linux/install.sh' 2>&1)
+check "rerun moves VNC off :1" \
+  "grep -q '^mapped *:10=tester' <<< \"\$fix\" && as_root 'ss -ltnH' | grep -q '127.0.0.1:$vnc_port '"
+check "rerun disables the :1 unit" "! as_root 'systemctl is-enabled tigervncserver@:1.service'"
 
 echo "## SSH_PORT moves the port and closes the old one"
 new_port=$((ssh_port == 20000 ? 20001 : 20000))

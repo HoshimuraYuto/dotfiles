@@ -171,19 +171,34 @@ put "$vnc_conf" "$(fill tigervnc.conf)"
 vnc_changed=$changed
 put /etc/polkit-1/rules.d/50-dotfiles-colord.rules "$(< "$src/colord.rules")" sudo
 
-owner=$(sed -n "s/^ *$vnc_display=//p" "$vnc_users" | head -1)
-if [[ $owner == "$user" ]]; then
-  echo "ok         $vnc_users"
-elif [[ -n $owner ]]; then
-  echo "CONFLICT   $vnc_users maps $vnc_display to $owner"
-  failed=1
-elif $dry; then
-  echo "would add  $vnc_display=$user to $vnc_users"
-  vnc_changed=true
+# An X server already holds display N when /tmp/.XN-lock or its socket exists;
+# the desktop's own Xwayland takes the lowest free numbers, starting at :0.
+display_free() { [[ ! -e /tmp/.X$1-lock && ! -e /tmp/.X11-unix/X$1 ]]; }
+display_ours() { systemctl is-active --quiet "tigervncserver@:$1.service" || display_free "$1"; }
+
+mapped=$(sed -n "s/^ *:\([0-9]*\)=$user *\$/\1/p" "$vnc_users" | head -1)
+if [[ -n $mapped ]] && display_ours "$mapped"; then
+  vnc_display=:$mapped
+  echo "ok         $vnc_users ($vnc_display)"
 else
-  echo "$vnc_display=$user" | sudo tee -a "$vnc_users" > /dev/null
-  echo "added      $vnc_display=$user to $vnc_users"
+  if [[ -n $mapped ]]; then
+    echo "TAKEN      display :$mapped is used by another X server"
+  fi
+  # Start well above the displays a desktop login uses
+  n=10
+  until display_free "$n" && ! grep -q "^ *:$n=" "$vnc_users"; do n=$((n + 1)); done
+  vnc_display=:$n
   vnc_changed=true
+  if $dry; then
+    echo "would map  $vnc_display=$user in $vnc_users"
+  else
+    if [[ -n $mapped ]]; then
+      sudo systemctl disable --now --quiet "tigervncserver@:$mapped.service" || true
+      sudo sed -i "/^ *:$mapped=$user *\$/d" "$vnc_users"
+    fi
+    echo "$vnc_display=$user" | sudo tee -a "$vnc_users" > /dev/null
+    echo "mapped     $vnc_display=$user in $vnc_users"
+  fi
 fi
 
 if [[ -s $HOME/.vnc/passwd ]]; then
@@ -204,6 +219,17 @@ if ! $dry && ((failed == 0)); then
     sudo systemctl restart "$unit"
   fi
   sudo systemctl enable --now --quiet "$unit"
+  # The unit reports success even when tigervncserver exits at once, so check the port
+  for _ in {1..10}; do
+    ss -ltnH | awk '{print $4}' | grep -qx "127.0.0.1:$vnc_port" && break
+    sleep 1
+  done
+  if ss -ltnH | awk '{print $4}' | grep -qx "127.0.0.1:$vnc_port"; then
+    echo "ok         VNC listening ($vnc_display)"
+  else
+    echo "FAILED     VNC is not listening; see linux/status.sh"
+    failed=1
+  fi
 fi
 
 # --- Summary

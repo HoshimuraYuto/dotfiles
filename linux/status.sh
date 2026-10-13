@@ -7,7 +7,8 @@ user=$(id -un)
 host=$(hostname)
 ssh_conf=/etc/ssh/sshd_config.d/50-dotfiles.conf
 vnc_conf=$HOME/.vnc/tigervnc.conf
-unit=tigervncserver@:1.service
+display=$(sed -n "s/^ *:\([0-9]*\)=$user *\$/\1/p" /etc/tigervnc/vncserver.users 2> /dev/null | head -1)
+unit=tigervncserver@:${display:-?}.service
 ssh_port=$(sed -n 's/^Port \([0-9]*\)$/\1/p' "$ssh_conf" 2> /dev/null)
 vnc_port=$(sed -n 's/^\$rfbport = \([0-9]*\);$/\1/p' "$vnc_conf" 2> /dev/null)
 
@@ -87,8 +88,12 @@ report() {
     || journalctl -b -u "$unit" -n 30 --no-pager 2>&1
 
   echo
-  echo "--- ~/.vnc/$host:1.log"
-  tail -n 40 "$HOME/.vnc/$host:1.log" 2> /dev/null | grep -v 'Could not resolve keysym' \
+  echo "--- X displays in use"
+  ls /tmp/.X11-unix 2> /dev/null | paste -sd ' ' -
+
+  echo
+  echo "--- ~/.vnc/$host:${display:-?}.log"
+  tail -n 40 "$HOME/.vnc/$host:${display:-?}.log" 2> /dev/null | grep -v 'Could not resolve keysym' \
     || echo "(none)"
 }
 
