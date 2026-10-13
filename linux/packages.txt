@@ -1,0 +1,12 @@
+curl
+git
+
+ufw
+openssh-server
+
+# VNC runs its own XFCE session: GNOME's Wayland session does not start in Xtigervnc
+tigervnc-standalone-server
+tigervnc-tools
+xfce4
+xfce4-terminal
+dbus-x11
