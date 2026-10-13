@@ -46,6 +46,11 @@ asked once with `tigervncpasswd`; VNC uses only the first 8 characters. A polkit
 rule lets administrators register the VNC screen with colord, which otherwise
 asks for a password on every login.
 
+When something does not connect, run `linux/status.sh` on the machine (or
+`ssh <host> '~/dotfiles/linux/status.sh' | pbcopy` from the Mac). It marks each
+check `ok` or `NG`, appends the VNC logs, and replaces ports, addresses, the
+host name and the user name, so the output can be pasted as is.
+
 An existing file at either config path that was not written by this installer
 is reported as a conflict, not replaced.
 

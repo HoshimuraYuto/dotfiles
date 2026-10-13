@@ -81,6 +81,16 @@ check "key login on the new port" "from_client 'ssh $ssh_opts -o BatchMode=yes t
 check "VNC answers through an SSH tunnel" \
   "from_client 'ssh $ssh_opts -f -o ExitOnForwardFailure=yes -L 5901:localhost:$vnc_port tester@$host sleep 5 && head -c 12 < /dev/tcp/127.0.0.1/5901' | grep -q '^RFB 003'"
 
+echo "## status report"
+status=$(on '/dotfiles/linux/status.sh')
+check "status reports no problem" "! grep -q '^NG' <<< \"\$status\""
+check "status hides ports, address, host and user" \
+  "! grep -qE '\\b($ssh_port|$vnc_port)\\b|$host|tester|172\\.' <<< \"\$status\""
+as_root 'systemctl stop tigervncserver@:1.service'
+check "status reports a stopped VNC server" \
+  "on '/dotfiles/linux/status.sh' | grep -q '^NG *VNC: nothing listens on 127.0.0.1:<VNC_PORT>'"
+as_root 'systemctl start tigervncserver@:1.service'
+
 echo "## second run, after a key was added"
 out2=$(on '/dotfiles/linux/install.sh' 2>&1)
 check "ports are kept" "grep -q '^SSH port $ssh_port, VNC port $vnc_port ' <<< \"\$out2\""
