@@ -60,6 +60,14 @@ RDP shares the screen on the monitor; it cannot start a session. GNOME
 drops the connection while the screen is locked and refuses it at the login
 screen, so the user must be logged in and the screen unlocked.
 
+FreeRDP 3.32.0 and 3.32.1 (Ubuntu's updates as of October 2026) stall Windows
+App at "Securing connection to remote PC"
+([FreeRDP#13549](https://github.com/FreeRDP/FreeRDP/issues/13549),
+[LP#2168823](https://bugs.launchpad.net/ubuntu/+source/freerdp3/+bug/2168823)).
+FreeRDP 3.32.2 fixes it; until Ubuntu ships it, rebuild Ubuntu's `freerdp3`
+with upstream commit `cbb6a73d1` and install `libfreerdp3-3`,
+`libfreerdp-server3-3` and `libwinpr3-3`.
+
 Earlier versions of this installer ran a separate TigerVNC XFCE session. A
 second desktop of the same user shares GNOME's user services and broke the
 GNOME unlock, so `install.sh` now removes it and lists its packages for
