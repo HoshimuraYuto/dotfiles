@@ -5,7 +5,9 @@ set -euo pipefail
 
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 repo=$(cd "$here/../.." && pwd)
-tag=dotfiles-linux-test
+# UBUNTU=24.04 tests the older LTS; the default is the current one
+ubuntu=${UBUNTU:-26.04}
+tag=dotfiles-linux-test:$ubuntu
 net=dotfiles-linux-test
 host=dotfiles-linux-host
 client=dotfiles-linux-client
@@ -18,7 +20,8 @@ cleanup() {
 [[ ${KEEP-} == 1 ]] || trap cleanup EXIT
 cleanup
 
-docker build -q -t "$tag" "$here" > /dev/null
+docker build -q --build-arg UBUNTU="$ubuntu" -t "$tag" "$here" > /dev/null
+echo "# Ubuntu $ubuntu"
 docker network create "$net" > /dev/null
 for name in "$host" "$client"; do
   docker run -d --name "$name" --hostname "$name" --network "$net" \
@@ -35,7 +38,11 @@ from_client() { docker exec -u tester "$client" bash -c "$1"; }
 pass=0
 fail=0
 check() {
-  if eval "$2" > /dev/null 2>&1; then
+  # pipefail would count a producer killed by SIGPIPE (grep -q stops reading early) as a failure
+  if (
+    set +o pipefail
+    eval "$2"
+  ) > /dev/null 2>&1; then
     echo "pass  $1"
     pass=$((pass + 1))
   else

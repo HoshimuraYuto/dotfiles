@@ -1,6 +1,6 @@
 # Linux
 
-Minimal setup for an Ubuntu 24.04 desktop reached from a Mac on the same LAN:
+Minimal setup for an Ubuntu 24.04 or 26.04 desktop reached from a Mac on the same LAN:
 the packages in [`packages.txt`](packages.txt), ufw, SSH and remote desktop.
 
 On a fresh machine, logged in to the desktop:
@@ -56,7 +56,7 @@ the job. After reinstalling Linux the host key changes and ssh refuses to
 forward; the client only sees a failed connection, so rerun `mac-tunnel.sh`,
 which reports it.
 
-RDP shares the screen on the monitor; it cannot start a session. GNOME 46
+RDP shares the screen on the monitor; it cannot start a session. GNOME
 drops the connection while the screen is locked and refuses it at the login
 screen, so the user must be logged in and the screen unlocked.
 
@@ -77,12 +77,12 @@ as a conflict, not replaced.
 
 Installed separately, not by `install.sh`.
 
-|                            | Used by      |
-| -------------------------- | ------------ |
-| Ubuntu 24.04 desktop, sudo | `install.sh` |
-| git                        | cloning      |
-| Windows App (on the Mac)   | connecting   |
-| Docker (on the Mac)        | `test/`      |
+|                                     | Used by      |
+| ----------------------------------- | ------------ |
+| Ubuntu 24.04 or 26.04 desktop, sudo | `install.sh` |
+| git                                 | cloning      |
+| Windows App (on the Mac)            | connecting   |
+| Docker (on the Mac)                 | `test/`      |
 
 ## Checks
 
@@ -90,7 +90,7 @@ Installed separately, not by `install.sh`.
 linux/test/run.sh
 ```
 
-builds a systemd Ubuntu 24.04 container with a headless GNOME Shell, runs the
+builds a systemd Ubuntu 26.04 container (`UBUNTU=24.04` for the older LTS) with a headless GNOME Shell, runs the
 installer over an earlier VNC setup, and connects over SSH and RDP from a second
 container. `mac-tunnel.sh` needs launchd, so it is not covered; it was
 checked by hand against the same container.

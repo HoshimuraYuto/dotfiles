@@ -276,7 +276,7 @@ else
   if [[ -z ${pw-} ]]; then
     echo "MISSING    RDP password; run this installer in a terminal" >&2
     failed=1
-  # grdctl 46 takes the password only as an argument
+  # grdctl takes the password only as an argument (or interactively)
   elif timeout 20 grdctl rdp set-credentials "$user" "$pw" 2> /dev/null; then
     echo "set        RDP credentials"
   else
