@@ -1,12 +1,9 @@
 curl
 git
+openssl
 
 ufw
 openssh-server
 
-# VNC runs its own XFCE session: GNOME's Wayland session does not start in Xtigervnc
-tigervnc-standalone-server
-tigervnc-tools
-xfce4
-xfce4-terminal
-dbus-x11
+# Remote desktop: GNOME's own RDP server, sharing the logged-in desktop
+gnome-remote-desktop

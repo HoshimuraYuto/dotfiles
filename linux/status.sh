@@ -6,11 +6,13 @@ set -uo pipefail
 user=$(id -un)
 host=$(hostname)
 ssh_conf=/etc/ssh/sshd_config.d/50-dotfiles.conf
-vnc_conf=$HOME/.vnc/tigervnc.conf
-display=$(sed -n "s/^ *:\([0-9]*\)=$user *\$/\1/p" /etc/tigervnc/vncserver.users 2> /dev/null | head -1)
-unit=tigervncserver@:${display:-?}.service
+schema=org.gnome.desktop.remote-desktop.rdp
+unit=gnome-remote-desktop.service
+# Over SSH the GNOME session's bus is not in the environment; it is the user bus
+export XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR:-/run/user/$(id -u)}
+export DBUS_SESSION_BUS_ADDRESS=${DBUS_SESSION_BUS_ADDRESS:-unix:path=$XDG_RUNTIME_DIR/bus}
 ssh_port=$(sed -n 's/^Port \([0-9]*\)$/\1/p' "$ssh_conf" 2> /dev/null)
-vnc_port=$(sed -n 's/^\$rfbport = \([0-9]*\);$/\1/p' "$vnc_conf" 2> /dev/null)
+rdp_port=$(gsettings get "$schema" port 2> /dev/null | sed 's/^uint16 //')
 
 line() { printf '%-5s %s\n' "$1" "$2"; }
 # Root-only reads are tried without a password prompt so that
@@ -45,62 +47,60 @@ report() {
     else
       line NG "ufw: inactive"
     fi
+    if [[ -n $rdp_port ]] && grep -q "^$rdp_port/" <<< "$status"; then
+      line NG "ufw: RDP port is open to the network"
+    fi
   elif grep -qx 'ENABLED=yes' /etc/ufw/ufw.conf 2> /dev/null; then
     line ok "ufw: enabled (rules need sudo to read)"
   else
     line NG "ufw: not enabled"
   fi
 
-  if [[ -z $vnc_port ]]; then
-    line NG "VNC: $vnc_conf missing; run linux/install.sh"
+  if [[ ! -S $XDG_RUNTIME_DIR/bus ]]; then
+    line NG "RDP: no session bus; nobody is logged in to the desktop"
+  elif [[ $(gsettings get "$schema" enable 2> /dev/null) == true ]]; then
+    line ok "RDP: enabled"
+  else
+    line NG "RDP: disabled; run linux/install.sh"
   fi
-  state=$(systemctl is-active "$unit")
+  [[ $(gsettings get "$schema" view-only 2> /dev/null) == false ]] \
+    || line NG "RDP: view-only (no mouse or keyboard)"
+  state=$(systemctl --user is-active "$unit" 2> /dev/null)
   if [[ $state == active ]]; then
-    line ok "VNC: $unit active"
+    line ok "RDP: $unit active"
   else
-    line NG "VNC: $unit $state ($(systemctl show -p Result --value "$unit"))"
+    line NG "RDP: $unit ${state:-unknown}"
   fi
-  if [[ -n $vnc_port ]]; then
-    if grep -qx "127.0.0.1:$vnc_port" <<< "$listening"; then
-      line ok "VNC: listening on 127.0.0.1:$vnc_port"
-    else
-      line NG "VNC: nothing listens on 127.0.0.1:$vnc_port"
-    fi
-  fi
-  if pgrep -u "$user" -x xfce4-session > /dev/null; then
-    line ok "VNC: XFCE session running"
+  if [[ -n $rdp_port ]] && grep -q ":$rdp_port\$" <<< "$listening"; then
+    line ok "RDP: listening on $rdp_port"
   else
-    line NG "VNC: no XFCE session"
+    line NG "RDP: nothing listens on ${rdp_port:-its port}"
   fi
-  [[ -s $HOME/.vnc/passwd ]] || line NG "VNC: ~/.vnc/passwd missing; run tigervncpasswd"
+  case $(timeout 20 grdctl status 2> /dev/null | sed -n 's/^\s*Username: //p') in
+    "(hidden)") line ok "RDP: credentials stored" ;;
+    "") line NG "RDP: grdctl status failed (login keyring locked?)" ;;
+    *) line NG "RDP: no credentials; run linux/install.sh" ;;
+  esac
+  if [[ -f /etc/tigervnc/vncserver.users ]] && grep -q "=$user *\$" /etc/tigervnc/vncserver.users; then
+    line NG "VNC: an earlier TigerVNC session is still configured; run linux/install.sh"
+  fi
 
   echo
   echo "--- sessions of $user"
   loginctl list-sessions --no-legend 2> /dev/null | awk -v u="$user" '$3 == u {print $1}' \
     | while read -r id; do
-      echo "$id $(loginctl show-session "$id" -p Type -p Class -p Service -p State --value | paste -sd ' ' -)"
+      echo "$id $(loginctl show-session "$id" -p Type -p Class -p Service -p State -p LockedHint --value | paste -sd ' ' -)"
     done
 
   echo
   echo "--- $unit journal, this boot"
-  # Without sudo or the adm group journalctl prints "No entries" instead of failing
-  root journalctl -b -u "$unit" -n 30 --no-pager \
-    || journalctl -b -u "$unit" -n 30 --no-pager 2>&1
-
-  echo
-  echo "--- X displays in use"
-  ls /tmp/.X11-unix 2> /dev/null | paste -sd ' ' -
-
-  echo
-  echo "--- ~/.vnc/$host:${display:-?}.log"
-  tail -n 40 "$HOME/.vnc/$host:${display:-?}.log" 2> /dev/null | grep -v 'Could not resolve keysym' \
-    || echo "(none)"
+  journalctl --user -b -u "$unit" -n 30 --no-pager 2>&1
 }
 
 redact() {
-  SSH_PORT=$ssh_port VNC_PORT=$vnc_port H=$host U=$user perl -pe '
+  SSH_PORT=$ssh_port RDP_PORT=$rdp_port H=$host U=$user perl -pe '
     s/\b$ENV{SSH_PORT}\b/<SSH_PORT>/g if $ENV{SSH_PORT};
-    s/\b$ENV{VNC_PORT}\b/<VNC_PORT>/g if $ENV{VNC_PORT};
+    s/\b$ENV{RDP_PORT}\b/<RDP_PORT>/g if $ENV{RDP_PORT};
     s/\Q$ENV{H}\E/<HOST>/g;
     s/\b\Q$ENV{U}\E\b/<USER>/g;
     s/\b(?!127\.|0\.0\.0\.0\b)\d{1,3}(?:\.\d{1,3}){3}\b/<IP>/g;

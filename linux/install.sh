@@ -12,17 +12,20 @@ case ${1-} in
     ;;
 esac
 if ((EUID == 0)); then
-  echo "Run as the desktop user; the VNC session belongs to the user who runs this." >&2
+  echo "Run as the desktop user; remote desktop shares that user's GNOME session." >&2
   exit 2
 fi
 
 failed=0
 user=$(id -un)
+host=$(hostname)
 ssh_conf=/etc/ssh/sshd_config.d/50-dotfiles.conf
-vnc_conf=$HOME/.vnc/tigervnc.conf
-vnc_users=/etc/tigervnc/vncserver.users
-vnc_display=:1
 marker='Managed by dotfiles linux/install.sh'
+rdp_schema=org.gnome.desktop.remote-desktop.rdp
+rdp_dir=$HOME/.local/share/gnome-remote-desktop
+# Over SSH the GNOME session's bus is not in the environment; it is the user bus
+export XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR:-/run/user/$(id -u)}
+export DBUS_SESSION_BUS_ADDRESS=${DBUS_SESSION_BUS_ADDRESS:-unix:path=$XDG_RUNTIME_DIR/bus}
 
 # --- Packages
 
@@ -45,7 +48,7 @@ if $dry && [[ -n $missing ]]; then
   exit 0
 fi
 
-# --- Ports: random on the first run, then kept from the files written below
+# --- Ports: random on the first run, then kept from the settings written below
 
 listening() { ss -ltnH | awk '{print $4}' | sed 's/.*://' | sort -u; }
 
@@ -62,18 +65,28 @@ random_port() {
 
 valid_port() { [[ $1 =~ ^[0-9]+$ ]] && (($1 >= 1024 && $1 <= 65535)); }
 
+# gsettings prints "uint16 3389", "'/path'" or "true"; compare bare values
+rdp_get() { gsettings get "$rdp_schema" "$1" 2> /dev/null | sed -e 's/^uint16 //' -e "s/^'\(.*\)'\$/\1/"; }
+
+if [[ ! -S $XDG_RUNTIME_DIR/bus ]]; then
+  echo "MISSING    no session bus at $XDG_RUNTIME_DIR/bus; log in to the desktop first" >&2
+  exit 1
+fi
+
 current_ssh=$(sed -n 's/^Port \([0-9]*\)$/\1/p' "$ssh_conf" 2> /dev/null || true)
-current_vnc=$(sed -n 's/^\$rfbport = \([0-9]*\);$/\1/p' "$vnc_conf" 2> /dev/null || true)
+current_rdp=$(rdp_get port)
+# 3389 is GNOME's default, so it was not chosen here
+[[ $current_rdp == 3389 ]] && current_rdp=
 ssh_port=${SSH_PORT:-${current_ssh:-$(random_port)}}
-vnc_port=${VNC_PORT:-${current_vnc:-$(random_port "$ssh_port")}}
-for p in "$ssh_port" "$vnc_port"; do
+rdp_port=${RDP_PORT:-${current_rdp:-$(random_port "$ssh_port")}}
+for p in "$ssh_port" "$rdp_port"; do
   if ! valid_port "$p"; then
     echo "INVALID    port $p (1024-65535)" >&2
     exit 2
   fi
 done
-if [[ $ssh_port == "$vnc_port" ]]; then
-  echo "INVALID    SSH and VNC share port $ssh_port" >&2
+if [[ $ssh_port == "$rdp_port" ]]; then
+  echo "INVALID    SSH and RDP share port $ssh_port" >&2
   exit 2
 fi
 
@@ -81,7 +94,6 @@ fill() {
   local content
   content=$(< "$src/$1")
   content=${content//@SSH_PORT@/"$ssh_port"}
-  content=${content//@VNC_PORT@/"$vnc_port"}
   content=${content//@PASSWORD_AUTH@/"$password_auth"}
   printf '%s' "$content"
 }
@@ -109,7 +121,7 @@ put() {
   echo "wrote      $dest"
 }
 
-# --- Firewall: open the new SSH port before sshd moves to it
+# --- Firewall: open the new SSH port before sshd moves to it; RDP stays closed
 
 rule="ufw limit $ssh_port/tcp comment 'dotfiles-ssh'"
 added=$(sudo ufw show added)
@@ -165,79 +177,138 @@ while read -r stale; do
   fi
 done < <(sed -n "s/^ufw limit \([0-9]*\)\/tcp comment 'dotfiles-ssh'$/\1/p" <<< "$added" | grep -vx "$ssh_port" || true)
 
-# --- VNC: TigerVNC on localhost only, reached through an SSH tunnel
+# --- Earlier versions ran a separate TigerVNC XFCE session for this user. A second
+# desktop of the same user shares its systemd user manager and session bus with
+# GNOME, which broke GNOME's unlock, so remove it.
 
-put "$vnc_conf" "$(fill tigervnc.conf)"
-vnc_changed=$changed
-put /etc/polkit-1/rules.d/50-dotfiles-colord.rules "$(< "$src/colord.rules")" sudo
-
-# An X server already holds display N when /tmp/.XN-lock or its socket exists;
-# the desktop's own Xwayland takes the lowest free numbers, starting at :0.
-display_free() { [[ ! -e /tmp/.X$1-lock && ! -e /tmp/.X11-unix/X$1 ]]; }
-display_ours() { systemctl is-active --quiet "tigervncserver@:$1.service" || display_free "$1"; }
-
-mapped=$(sed -n "s/^ *:\([0-9]*\)=$user *\$/\1/p" "$vnc_users" | head -1)
-if [[ -n $mapped ]] && display_ours "$mapped"; then
-  vnc_display=:$mapped
-  echo "ok         $vnc_users ($vnc_display)"
-else
-  if [[ -n $mapped ]]; then
-    echo "TAKEN      display :$mapped is used by another X server"
-  fi
-  # Start well above the displays a desktop login uses
-  n=10
-  until display_free "$n" && ! grep -q "^ *:$n=" "$vnc_users"; do n=$((n + 1)); done
-  vnc_display=:$n
-  vnc_changed=true
+vnc_users=/etc/tigervnc/vncserver.users
+while read -r n; do
+  [[ -z $n ]] && continue
   if $dry; then
-    echo "would map  $vnc_display=$user in $vnc_users"
+    echo "would remove TigerVNC display :$n"
   else
-    if [[ -n $mapped ]]; then
-      sudo systemctl disable --now --quiet "tigervncserver@:$mapped.service" || true
-      sudo sed -i "/^ *:$mapped=$user *\$/d" "$vnc_users"
-    fi
-    echo "$vnc_display=$user" | sudo tee -a "$vnc_users" > /dev/null
-    echo "mapped     $vnc_display=$user in $vnc_users"
+    sudo systemctl disable --now --quiet "tigervncserver@:$n.service" 2> /dev/null || true
+    sudo sed -i "/^ *:$n=$user *\$/d" "$vnc_users"
+    echo "removed    TigerVNC display :$n"
+  fi
+done < <(sed -n "s/^ *:\([0-9]*\)=$user *\$/\1/p" "$vnc_users" 2> /dev/null || true)
+for old in "$HOME/.vnc/tigervnc.conf" /etc/polkit-1/rules.d/50-dotfiles-colord.rules; do
+  if [[ ! -f $old ]] || ! head -1 "$old" | grep -qF "$marker"; then
+    continue
+  fi
+  if $dry; then
+    echo "would remove $old"
+  else
+    sudo rm -f "$old"
+    echo "removed    $old"
+  fi
+done
+# The VNC password is stored with a reversible cipher; it has no other use here
+if [[ -f $HOME/.vnc/passwd ]]; then
+  if $dry; then
+    echo "would remove ~/.vnc/passwd"
+  else
+    rm -f "$HOME/.vnc/passwd"
+    echo "removed    ~/.vnc/passwd"
   fi
 fi
+leftover=$(for p in tigervnc-standalone-server tigervnc-tools xfce4 xfce4-terminal; do
+  if dpkg-query -W -f='${db:Status-Status}' "$p" 2> /dev/null | grep -qx installed; then
+    echo "$p"
+  fi
+done | paste -sd ' ' -)
 
-if [[ -s $HOME/.vnc/passwd ]]; then
-  echo "ok         ~/.vnc/passwd"
+# --- RDP: GNOME Remote Desktop shares the logged-in screen. ufw keeps its port
+# closed, so it is reached only through SSH.
+
+rdp_changed=false
+rdp_set() {
+  local key=$1 value=$2
+  if [[ $(rdp_get "$key") == "$value" ]]; then
+    return
+  fi
+  rdp_changed=true
+  if $dry; then
+    echo "would set  $rdp_schema $key $value"
+  else
+    gsettings set "$rdp_schema" "$key" "$value"
+    echo "set        $rdp_schema $key $value"
+  fi
+}
+
+if [[ -s $rdp_dir/rdp-tls.key && -s $rdp_dir/rdp-tls.crt ]]; then
+  echo "ok         $rdp_dir/rdp-tls.crt"
 elif $dry; then
-  echo "would ask  for a VNC password"
-elif [[ -t 0 ]]; then
-  echo "Set the VNC password (6-8 characters; VNC ignores the rest):"
-  tigervncpasswd
+  echo "would create a self-signed certificate in $rdp_dir"
 else
-  echo "MISSING    ~/.vnc/passwd; run tigervncpasswd, then this installer again"
-  failed=1
+  mkdir -p "$rdp_dir"
+  (umask 077 && openssl req -x509 -newkey rsa:4096 -nodes -days 3650 -subj "/CN=$host" \
+    -keyout "$rdp_dir/rdp-tls.key" -out "$rdp_dir/rdp-tls.crt" 2> /dev/null)
+  echo "created    $rdp_dir/rdp-tls.crt"
+fi
+rdp_set tls-key "$rdp_dir/rdp-tls.key"
+rdp_set tls-cert "$rdp_dir/rdp-tls.crt"
+rdp_set port "$rdp_port"
+rdp_set negotiate-port false
+rdp_set view-only false
+rdp_set enable true
+$rdp_changed || echo "ok         $rdp_schema"
+
+# Credentials live in the login keyring, which the desktop login unlocks
+creds=$(timeout 20 grdctl status 2> /dev/null | sed -n 's/^\s*Username: //p')
+if [[ $creds == "(hidden)" ]]; then
+  echo "ok         RDP credentials"
+elif $dry; then
+  echo "would ask  for an RDP password"
+else
+  if [[ -t 0 ]]; then
+    read -rsp "RDP password for $user (not the login password): " pw
+    echo
+    read -rsp "Again: " pw2
+    echo
+    if [[ $pw != "$pw2" ]]; then
+      echo "FAILED     passwords differ; run this installer again" >&2
+      exit 1
+    fi
+  else
+    read -r pw || true
+  fi
+  if [[ -z ${pw-} ]]; then
+    echo "MISSING    RDP password; run this installer in a terminal" >&2
+    failed=1
+  # grdctl 46 takes the password only as an argument
+  elif timeout 20 grdctl rdp set-credentials "$user" "$pw" 2> /dev/null; then
+    echo "set        RDP credentials"
+  else
+    echo "FAILED     grdctl could not store credentials; is the desktop logged in?" >&2
+    failed=1
+  fi
+  unset pw pw2
 fi
 
-unit=tigervncserver@$vnc_display.service
+unit=gnome-remote-desktop.service
 if ! $dry && ((failed == 0)); then
-  if $vnc_changed && systemctl is-active --quiet "$unit"; then
-    sudo systemctl restart "$unit"
+  if $rdp_changed && systemctl --user is-active --quiet "$unit"; then
+    systemctl --user restart "$unit"
   fi
-  sudo systemctl enable --now --quiet "$unit"
-  # The unit reports success even when tigervncserver exits at once, so check the port
+  systemctl --user enable --now --quiet "$unit" 2> /dev/null
   for _ in {1..10}; do
-    ss -ltnH | awk '{print $4}' | grep -qx "127.0.0.1:$vnc_port" && break
+    listening | grep -qx "$rdp_port" && break
     sleep 1
   done
-  if ss -ltnH | awk '{print $4}' | grep -qx "127.0.0.1:$vnc_port"; then
-    echo "ok         VNC listening ($vnc_display)"
+  if listening | grep -qx "$rdp_port"; then
+    echo "ok         RDP listening"
   else
-    echo "FAILED     VNC is not listening; see linux/status.sh"
+    echo "FAILED     RDP is not listening; see linux/status.sh"
     failed=1
   fi
 fi
 
 # --- Summary
 
-host=$(hostname)
 cat << EOF
 
-SSH port $ssh_port, VNC port $vnc_port (localhost only)
+SSH port $ssh_port, RDP port $rdp_port (closed by ufw; reached through SSH)
 Add to ~/.ssh/config on the Mac:
 
   Host $host
@@ -246,11 +317,11 @@ Add to ~/.ssh/config on the Mac:
     User $user
     IdentityFile ~/.ssh/id_ed25519_$host
     IdentitiesOnly yes
-    LocalForward 5901 localhost:$vnc_port
 
 IdentitiesOnly stops ssh offering every agent key first; sshd disconnects
 after six with "Too many authentication failures".
-Then: ssh $host, and open vnc://localhost:5901 while it is connected.
+Then, on the Mac: ~/dotfiles/linux/mac-tunnel.sh $host $rdp_port
+and connect Windows App to "localhost" as $user with the RDP password.
 EOF
 if [[ $password_auth == yes ]]; then
   cat << EOF
@@ -260,6 +331,13 @@ From the Mac, after adding the entry above:
   ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519_$host
   ssh-copy-id -i ~/.ssh/id_ed25519_$host.pub $host
 Then run this installer again to allow keys only.
+EOF
+fi
+if [[ -n $leftover ]]; then
+  cat << EOF
+
+UNUSED     packages from the earlier VNC setup: $leftover
+Remove with: sudo apt purge $leftover && sudo apt autoremove
 EOF
 fi
 exit "$failed"
