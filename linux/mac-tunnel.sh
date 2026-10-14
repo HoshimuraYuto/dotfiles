@@ -57,7 +57,7 @@ if [[ -n $ssh_config ]]; then
 fi
 
 # The job runs ssh without a terminal: the host must resolve and log in with a key
-if ! ssh "${ssh_f[@]}" -G "$host" > /dev/null 2>&1; then
+if ! ssh ${ssh_f[@]+"${ssh_f[@]}"} -G "$host" > /dev/null 2>&1; then
   echo "INVALID    ssh cannot read the config for $host" >&2
   exit 2
 fi
@@ -98,7 +98,7 @@ launchctl bootstrap "$domain" "$plist"
 echo "loaded     $label: localhost:$local_port -> $host -> localhost:$port"
 
 # Prove the path end to end: launchd accepts, ssh logs in, the RDP server answers
-err=$(ssh "${ssh_f[@]}" -o BatchMode=yes -o ConnectTimeout=5 "$host" true 2>&1 > /dev/null) && ok=true || ok=false
+err=$(ssh ${ssh_f[@]+"${ssh_f[@]}"} -o BatchMode=yes -o ConnectTimeout=5 "$host" true 2>&1 > /dev/null) && ok=true || ok=false
 if $ok && ! grep -q 'IDENTIFICATION HAS CHANGED' <<< "$err"; then
   echo "ok         ssh $host logs in without a prompt"
 elif grep -q 'IDENTIFICATION HAS CHANGED' <<< "$err"; then
