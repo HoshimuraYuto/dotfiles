@@ -81,6 +81,17 @@ report() {
     "") line NG "RDP: grdctl status failed (login keyring locked?)" ;;
     *) line NG "RDP: no credentials; run linux/install.sh" ;;
   esac
+  ext=allowlockedremotedesktop@kamens.us
+  if [[ ! -f $HOME/.local/share/gnome-shell/extensions/$ext/metadata.json ]]; then
+    line NG "RDP while locked: extension not installed; run linux/install.sh"
+  elif ! gsettings get org.gnome.shell enabled-extensions 2> /dev/null | grep -qF "'$ext'"; then
+    line NG "RDP while locked: extension not enabled; run linux/install.sh"
+  elif gdbus call --session --dest org.gnome.Shell --object-path /org/gnome/Shell \
+    --method org.gnome.Shell.Extensions.GetExtensionInfo "$ext" 2> /dev/null | grep -q "'state': <1.0>"; then
+    line ok "RDP while locked: extension active"
+  else
+    line info "RDP while locked: extension loads after the next login"
+  fi
   if [[ -f /etc/tigervnc/vncserver.users ]] && grep -q "=$user *\$" /etc/tigervnc/vncserver.users; then
     line NG "VNC: an earlier TigerVNC session is still configured; run linux/install.sh"
   fi

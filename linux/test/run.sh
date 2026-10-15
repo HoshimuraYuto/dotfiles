@@ -37,6 +37,8 @@ as_root() { docker exec "$host" bash -c "$1"; }
 from_client() { docker exec -u tester "$client" bash -c "$1"; }
 pass=0
 fail=0
+# Waits inside a check end with "exit 0" on success and "exit 1" after the loop:
+# a bare for loop returns the status of its last sleep, which always passes.
 check() {
   # pipefail would count a producer killed by SIGPIPE (grep -q stops reading early) as a failure
   if (
@@ -60,7 +62,7 @@ sleep 2
 on 'echo test-password | gnome-keyring-daemon --unlock --components=secrets > /dev/null'
 on 'systemd-run --user --unit=gnome-shell gnome-shell --headless --wayland --virtual-monitor 1280x800' > /dev/null 2>&1
 check "GNOME Shell is up" \
-  "for _ in {1..30}; do on 'busctl --user status org.gnome.Mutter.RemoteDesktop' && break; sleep 1; done"
+  "for _ in {1..30}; do on 'busctl --user status org.gnome.Mutter.RemoteDesktop' && exit 0; sleep 1; done; exit 1"
 
 echo "## an earlier version's TigerVNC session, to be removed"
 as_root 'export DEBIAN_FRONTEND=noninteractive; apt-get update -qq && apt-get install -y -qq --no-install-recommends tigervnc-standalone-server tigervnc-tools' > /dev/null 2>&1
@@ -87,6 +89,15 @@ check "TigerVNC session removed" \
   "! as_root 'systemctl is-enabled tigervncserver@:10.service' && ! as_root 'grep -q tester /etc/tigervnc/vncserver.users'"
 check "VNC files removed" "on '[[ ! -e ~/.vnc/tigervnc.conf && ! -e ~/.vnc/passwd ]]'"
 check "summary lists the unused VNC packages" "grep -q '^UNUSED .*tigervnc-standalone-server' <<< \"\$out\""
+ext=allowlockedremotedesktop@kamens.us
+# gnome-extensions info knows the extension only after the shell has loaded it, so read the files
+check "lock-screen extension installed and enabled" \
+  "on 'grep -q \"\\\"version\\\": 17\" ~/.local/share/gnome-shell/extensions/$ext/metadata.json' && on 'gsettings get org.gnome.shell enabled-extensions' | grep -qF \"'$ext'\""
+check "summary asks to log in again to load it" "grep -q '^LOGIN ' <<< \"\$out\""
+# What the next login does: restart the shell, which then loads the extension
+on 'systemctl --user restart gnome-shell'
+check "extension active after the shell restarts" \
+  "for _ in {1..30}; do on \"gdbus call --session --dest org.gnome.Shell --object-path /org/gnome/Shell --method org.gnome.Shell.Extensions.GetExtensionInfo $ext\" | grep -q \"'state': <1.0>\" && exit 0; sleep 1; done; exit 1"
 
 echo "## from another machine"
 from_client 'ssh-keygen -q -t ed25519 -N "" -f ~/.ssh/id_ed25519 <<< y > /dev/null'
@@ -129,7 +140,7 @@ check "password login is refused" \
   "! from_client 'ssh $ssh_opts -o BatchMode=yes -o PreferredAuthentications=password tester@$host true'"
 check "key login still works" "from_client 'ssh $ssh_opts -o BatchMode=yes tester@$host true'"
 check "third run changes nothing" \
-  "! on '/dotfiles/linux/install.sh' | grep -qE '^(wrote|set|created|removed|would)'"
+  "! on '/dotfiles/linux/install.sh' | grep -qE '^(wrote|set|created|removed|installed|enabled|LOGIN|would)'"
 
 echo "## SSH_PORT moves the port and closes the old one"
 new_port=$((ssh_port == 20000 ? 20001 : 20000))
