@@ -11,6 +11,10 @@ case ${1-} in
     exit 2
     ;;
 esac
+if ! command -v apt-get > /dev/null || ! command -v gsettings > /dev/null; then
+  echo "This installer is for Ubuntu Desktop; run it on the Linux machine. On the Mac, use linux/mac-tunnel.sh." >&2
+  exit 2
+fi
 if ((EUID == 0)); then
   echo "Run as the desktop user; remote desktop shares that user's GNOME session." >&2
   exit 2
