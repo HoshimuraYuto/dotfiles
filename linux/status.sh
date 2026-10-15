@@ -90,7 +90,17 @@ report() {
     --method org.gnome.Shell.Extensions.GetExtensionInfo "$ext" 2> /dev/null | grep -q "'state': <1.0>"; then
     line ok "RDP while locked: extension active"
   else
-    line info "RDP while locked: extension loads after the next login"
+    # Locking and unlocking keeps the same shell; only logging out starts a new one
+    shell_pid=$(pgrep -u "$(id -u)" -xn gnome-shell)
+    shell_start=$(($(date +%s) - $(ps -o etimes= -p "$shell_pid" 2> /dev/null || echo 0)))
+    installed_at=$(stat -c %Y "$HOME/.local/share/gnome-shell/extensions/$ext")
+    if [[ -z $shell_pid ]]; then
+      line NG "RDP while locked: GNOME Shell is not running for this user"
+    elif ((shell_start < installed_at)); then
+      line NG "RDP while locked: GNOME Shell started before the extension was installed; log out (lock and unlock is not enough) or reboot"
+    else
+      line NG "RDP while locked: GNOME Shell did not load the extension; see journalctl --user -b _COMM=gnome-shell"
+    fi
   fi
   if [[ -f /etc/tigervnc/vncserver.users ]] && grep -q "=$user *\$" /etc/tigervnc/vncserver.users; then
     line NG "VNC: an earlier TigerVNC session is still configured; run linux/install.sh"

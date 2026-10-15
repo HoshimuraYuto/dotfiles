@@ -366,7 +366,7 @@ ext_active() {
     | grep -q "'state': <1.0>"
 }
 if ! $dry && ! ext_active; then
-  echo "LOGIN      log out and back in once to load $ext_uuid"
+  echo "LOGIN      log out and back in once (lock and unlock is not enough) to load $ext_uuid"
 fi
 
 # --- Summary
