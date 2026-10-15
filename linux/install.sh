@@ -335,7 +335,7 @@ else
   rm -f "$zip"
 fi
 
-# Set the list directly: on Wayland the shell sees a new extension only after the next login,
+# Set the list directly: on Wayland the shell sees a new extension only when it restarts,
 # so gnome-extensions enable would fail now
 enabled=$(gsettings get org.gnome.shell enabled-extensions)
 if grep -qF "'$ext_uuid'" <<< "$enabled"; then
@@ -366,7 +366,7 @@ ext_active() {
     | grep -q "'state': <1.0>"
 }
 if ! $dry && ! ext_active; then
-  echo "LOGIN      log out and back in once (lock and unlock is not enough) to load $ext_uuid"
+  echo "LOGIN      reboot once to load $ext_uuid (logging out did not restart GNOME Shell on Ubuntu 26.04)"
 fi
 
 # --- Summary

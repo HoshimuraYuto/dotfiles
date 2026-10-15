@@ -97,7 +97,7 @@ report() {
     if [[ -z $shell_pid ]]; then
       line NG "RDP while locked: GNOME Shell is not running for this user"
     elif ((shell_start < installed_at)); then
-      line NG "RDP while locked: GNOME Shell started before the extension was installed; log out (lock and unlock is not enough) or reboot"
+      line NG "RDP while locked: GNOME Shell started before the extension was installed; reboot (logging out may keep the same shell)"
     else
       line NG "RDP while locked: GNOME Shell did not load the extension; see journalctl --user -b _COMM=gnome-shell"
     fi

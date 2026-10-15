@@ -62,7 +62,7 @@ must be logged in. GNOME stops remote access while the screen is locked;
 [Allow Locked Remote Desktop](https://extensions.gnome.org/extension/4338/allow-locked-remote-desktop/)
 extension (pinned version and checksum) so a client reaches the lock screen and
 unlocks it with the login password. That also unlocks the monitor. The shell
-loads the extension at the next login.
+loads the extension when it starts; reboot after installing, since logging out kept the same shell running on Ubuntu 26.04.
 
 FreeRDP 3.32.0 and 3.32.1 (Ubuntu's updates as of October 2026) stall Windows
 App at "Securing connection to remote PC"
