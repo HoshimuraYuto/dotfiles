@@ -1,0 +1,9 @@
+curl
+git
+openssl
+
+ufw
+openssh-server
+
+# Remote desktop: GNOME's own RDP server, sharing the logged-in desktop
+gnome-remote-desktop

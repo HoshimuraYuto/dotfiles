@@ -16,6 +16,8 @@ Install [Homebrew](https://brew.sh) first, then:
 ./hermes/install.sh
 ```
 
+For an Ubuntu machine, see [`linux/`](linux/README.md).
+
 Use `-n` with any installer to preview changes. Existing files and unrelated
 settings are preserved; conflicting entries are reported instead of replaced.
 
