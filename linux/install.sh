@@ -11,6 +11,10 @@ case ${1-} in
     exit 2
     ;;
 esac
+if ! command -v apt-get > /dev/null || ! command -v gsettings > /dev/null; then
+  echo "This installer is for Ubuntu Desktop; run it on the Linux machine. On the Mac, use linux/mac-tunnel.sh." >&2
+  exit 2
+fi
 if ((EUID == 0)); then
   echo "Run as the desktop user; remote desktop shares that user's GNOME session." >&2
   exit 2
@@ -302,6 +306,67 @@ if ! $dry && ((failed == 0)); then
     echo "FAILED     RDP is not listening; see linux/status.sh"
     failed=1
   fi
+fi
+
+# --- RDP while the screen is locked: GNOME stops remote access on lock; this
+# extension keeps it, so a client reaches the lock screen and unlocks it there.
+# Unlocking remotely also unlocks the monitor.
+
+ext_uuid=allowlockedremotedesktop@kamens.us
+ext_version=17
+ext_url="https://extensions.gnome.org/download-extension/$ext_uuid.shell-extension.zip?version_tag=69251"
+ext_sha256=97c0a2938d8a445fed8f532076f98fc12db5d44cea2e084a7405374fdb3ceb9b
+ext_dir=$HOME/.local/share/gnome-shell/extensions/$ext_uuid
+
+installed=$(sed -n 's/.*"version": *\([0-9]*\).*/\1/p' "$ext_dir/metadata.json" 2> /dev/null || true)
+if [[ $installed == "$ext_version" ]]; then
+  echo "ok         $ext_uuid $ext_version"
+elif $dry; then
+  echo "would install $ext_uuid $ext_version"
+else
+  zip=$(mktemp --suffix=.zip)
+  if curl -fsSL -o "$zip" "$ext_url" && echo "$ext_sha256  $zip" | sha256sum -c --quiet; then
+    gnome-extensions install --force "$zip"
+    echo "installed  $ext_uuid $ext_version"
+  else
+    echo "FAILED     $ext_uuid download or checksum" >&2
+    failed=1
+  fi
+  rm -f "$zip"
+fi
+
+# Set the list directly: on Wayland the shell sees a new extension only when it restarts,
+# so gnome-extensions enable would fail now
+enabled=$(gsettings get org.gnome.shell enabled-extensions)
+if grep -qF "'$ext_uuid'" <<< "$enabled"; then
+  echo "ok         $ext_uuid enabled"
+elif $dry; then
+  echo "would enable $ext_uuid"
+else
+  if [[ $enabled == "@as []" || $enabled == "[]" ]]; then
+    gsettings set org.gnome.shell enabled-extensions "['$ext_uuid']"
+  else
+    gsettings set org.gnome.shell enabled-extensions "${enabled%]}, '$ext_uuid']"
+  fi
+  echo "enabled    $ext_uuid"
+fi
+if [[ $(gsettings get org.gnome.shell disable-user-extensions) == true ]]; then
+  if $dry; then
+    echo "would set  org.gnome.shell disable-user-extensions false"
+  else
+    gsettings set org.gnome.shell disable-user-extensions false
+    echo "set        org.gnome.shell disable-user-extensions false"
+  fi
+fi
+# Ask the running shell: gnome-extensions info needs a helper Ubuntu 24.04 does not install.
+# State 1 is ACTIVE.
+ext_active() {
+  gdbus call --session --dest org.gnome.Shell --object-path /org/gnome/Shell \
+    --method org.gnome.Shell.Extensions.GetExtensionInfo "$ext_uuid" 2> /dev/null \
+    | grep -q "'state': <1.0>"
+}
+if ! $dry && ! ext_active; then
+  echo "LOGIN      reboot once to load $ext_uuid (logging out did not restart GNOME Shell on Ubuntu 26.04)"
 fi
 
 # --- Summary
