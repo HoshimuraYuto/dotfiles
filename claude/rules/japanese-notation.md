@@ -1,0 +1,1 @@
+../../rules/japanese-notation.md
