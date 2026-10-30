@@ -16,6 +16,8 @@ pre-commit:
 
     - name: prettier
       glob: "*.{md,json,yml,yaml,sh}"
+      # Prettier refuses a symlink named on the command line; its target is checked on its own
+      file_types: [not symlink]
       run: npx --no -- prettier --write {staged_files}
       stage_fixed: true
 
