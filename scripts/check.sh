@@ -63,4 +63,10 @@ section "Uncommitted changes in the repo" "$(git -C "$repo" status --short)"
 [[ -d $private/.git ]] \
   && section "Uncommitted changes in the private repo" "$(git -C "$private" status --short)"
 
+# Commits only on this Mac are lost with it. Compares with the last fetch; no network access.
+unpushed() { git -C "$1" log --oneline '@{upstream}..' 2> /dev/null; }
+section "Unpushed commits in the repo" "$(unpushed "$repo")"
+[[ -d $private/.git ]] \
+  && section "Unpushed commits in the private repo" "$(unpushed "$private")"
+
 exit "$drift"
