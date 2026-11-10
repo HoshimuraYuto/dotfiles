@@ -94,7 +94,7 @@ install_rules() {
 }
 install_rules
 
-# The private repository has its own git hooks (gitleaks, prettier, commitlint)
+# The private repository has its own git hooks (secretlint, prettier, commitlint)
 if [[ -f $private/package.json ]] && ! $auto; then
   if $dry; then
     echo "would run  npm install in $private"

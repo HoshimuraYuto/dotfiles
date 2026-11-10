@@ -23,7 +23,7 @@ private repository cloned to `~/dotfiles-private` (override with
 ```
 
 `install.sh` first runs `npm install` in the private repository, which sets up
-its own git hooks (gitleaks, prettier, commitlint). It then creates missing
+its own git hooks (secretlint, prettier, commitlint). It then creates missing
 profiles and applies, per profile, the shared `plugins.txt` followed by the
 profile's own, then `config.txt` with `hermes config set`. A plugin bundled with
 Hermes is turned on with `hermes plugins enable`; any other is installed from
@@ -89,8 +89,10 @@ repositories.
 
 Never put `.env`, `auth.json`, `memories/`, sessions, cron jobs or anything else
 that holds secrets in either repository. The pre-commit hook scans staged changes
-with gitleaks; it finds secrets, not personal details, which is what the private
-repository and a skill loaded through `skills.auto_load` are for.
+with secretlint: secrets in both repositories, and personal-data shapes (e-mail
+addresses, home paths with a user name, private addresses) in this one. Names and
+places have no shape; that is what the private repository and a skill loaded
+through `skills.auto_load` are for.
 
 ## Requirements
 
