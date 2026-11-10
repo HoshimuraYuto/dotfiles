@@ -69,4 +69,8 @@ section "Unpushed commits in the repo" "$(unpushed "$repo")"
 [[ -d $private/.git ]] \
   && section "Unpushed commits in the private repo" "$(unpushed "$private")"
 
+section "Leaks in the repo" "$("$repo/scripts/scan-leaks.sh" "$repo")"
+[[ -f $private/package.json ]] \
+  && section "Leaks in the private repo" "$("$repo/scripts/scan-leaks.sh" "$private")"
+
 exit "$drift"
